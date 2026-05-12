@@ -35,3 +35,23 @@ def pobierz_jednego(uczen_id: int):
         if not uczen:
             raise HTTPException(status_code=404, detail="Nie ma takiego ucznia")
         return uczen
+@app.patch("/uczen/{uczen_id}/stawka")
+def ustaw_nowa_stawke(uczen_id: int, nowa_stawka: int):
+    with Session(engine) as session:
+        uczen = session.get(UCZEN, uczen_id)
+        if not uczen:
+            raise HTTPException(status_code=404, detail="Taki uczen nie istnieje")
+        uczen.stawka_za_godzine = nowa_stawka
+        session.add(uczen)
+        session.commit()
+        session.refresh(uczen)
+        return uczen
+@app.delete("/uczen/{uczen_id}")
+def usun_ucznia(uczen_id: int):
+    with Session(engine) as session:
+        uczen = session.get(UCZEN, uczen_id)
+        if not uczen:
+            raise HTTPException(status_code=404, detail="Ten uczen nie istnieje lub zostal juz usuniety")
+        session.delete(uczen)
+        session.commit()
+        return {"wiadomosc": f"Uczen o ID {uczen_id} zostal trwale usuniety"}
