@@ -8,6 +8,12 @@ class UCZEN(SQLModel, table = True):
     imie: str
     nazwisko: str
     stawka_za_godzine: int
+class LEKCJA(SQLModel, table = True):
+    id_lekcji: int | None = Field(default=None, primary_key=True)
+    data: str
+    czas_trwania_minuty: int = 60
+    czy_oplacona: bool = False
+    uczen_id: int = Field(foreign_key="uczen.id")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
@@ -55,3 +61,37 @@ def usun_ucznia(uczen_id: int):
         session.delete(uczen)
         session.commit()
         return {"wiadomosc": f"Uczen o ID {uczen_id} zostal trwale usuniety"}
+@app.post("/uczen/{uczen_id}/lekcja")
+def dodaj_lekcje_dla_ucznia(uczen_id: int, nowa_lekcja: LEKCJA):
+    with Session(engine) as session:
+        uczen = session.get(UCZEN, uczen_id)
+        if not uczen:
+            raise HTTPException(status_code=404, detail="Nie mozna przypisac lekcji do nieistniejacego ucznia")
+        nowa_lekcja.uczen_id = uczen_id
+        session.add(nowa_lekcja)
+        session.commit()
+        session.refresh(nowa_lekcja)
+        return nowa_lekcja
+@app.patch("/lekcja/{lekcja_id}")
+def aktualizuj_lekcje(lekcja_id: int, czas_trwania: int | None = None, czy_zaplacono: bool | None = None):
+    with Session(engine) as session:
+        lekcja = session.get(LEKCJA, lekcja_id)
+        if not lekcja:
+            raise HTTPException(status_code=404, detail="Ta lekcja nie istnieje")
+        if czas_trwania is not None:
+            lekcja.czas_trwania_minuty = czas_trwania
+        if czy_zaplacono is not None:
+            lekcja.czy_oplacona = czy_zaplacono
+        session.add(lekcja)
+        session.commit()
+        session.refresh(lekcja)
+        return lekcja
+@app.delete("/lekcja/{lekcja_id}")
+def usun_lekcje(lekcja_id: int):
+    with Session(engine) as session:
+        lekcja = session.get(LEKCJA, lekcja_id)
+        if not lekcja:
+            raise HTTPException(status_code=404, detail= "Ta lekcja nie istnieje, nie mozemy jej usunac")
+        session.delete(lekcja)
+        session.commit()
+        return {"wiadomosc" : f"Lekcja o id {lekcja_id} zostala usunieta"}
