@@ -15,7 +15,7 @@ straznik_tokenow = OAuth2PasswordBearer(tokenUrl="login")
 class UCZEN(SQLModel, table = True):
     id: int | None = Field(default=None, primary_key=True)
     imie: str
-    nazwisko: str,
+    nazwisko: str
     stawka_za_godzine: int
     lekcje: list["LEKCJA"] = Relationship(back_populates="uczen")
 class LEKCJA(SQLModel, table = True):
@@ -111,7 +111,7 @@ def aktualizuj_lekcje(lekcja_id: int, czas_trwania: int | None = None, czy_zapla
         session.refresh(lekcja)
         return lekcja
 @app.delete("/lekcja/{lekcja_id}")
-def usun_lekcje(lekcja_id: int):
+def usun_lekcje(lekcja_id: int, token: str = Depends(straznik_tokenow)):
     with Session(engine) as session:
         lekcja = session.get(LEKCJA, lekcja_id)
         if not lekcja:
@@ -119,3 +119,19 @@ def usun_lekcje(lekcja_id: int):
         session.delete(lekcja)
         session.commit()
         return {"wiadomosc" : f"Lekcja o id {lekcja_id} zostala usunieta"}
+@app.get("/uczen/{uczen_id}/balans")
+def pobierz_balans_ucznia(uczen_id: int):
+    with Session(engine) as session:
+        uczen = session.get(UCZEN, uczen_id)
+        if not uczen:
+            raise HTTPException(status_code=404, detail= "Podany uczen nie istnieje")
+        zapytanie = select(LEKCJA).where(LEKCJA.uczen_id == uczen_id).where(LEKCJA.czy_oplacona == False)
+        nieoplacone_lekcje = session.exec(zapytanie).all()
+        suma_minut = sum(lekcja.czas_trwania_minuty for lekcja in nieoplacone_lekcje)
+        naleznosc = (suma_minut / 60) * uczen.stawka_za_godzine
+        return {
+            "uczen": f"{uczen.imie} {uczen.nazwisko}",
+            "liczba_nieoplaconych_lekcji": len(nieoplacone_lekcje),
+            "laczny_czas_zalegly_minuty": suma_minut,
+            "laczna_naleznosc": naleznosc
+        }
