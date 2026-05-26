@@ -1,9 +1,10 @@
 import jwt
+import time
 from fastapi import FastAPI, HTTPException
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 from contextlib import asynccontextmanager
 from sqlmodel import Relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import Query
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -16,9 +17,9 @@ sqlite_url = "sqlite:///baza.db"
 engine = create_engine(sqlite_url)
 SECRET_KEY = "cfa21af05f0843c2fcf0d5a753db321a6ce43d4c5b2f74cc357431f27cd1f6e4"
 ALGORITHM = "HS256"
+czas_wygasniecia_minuty = 60
 straznik_tokenow = OAuth2PasswordBearer(tokenUrl="login")
-class UCZEN(SQLModel, table = True):
-    id: int | None = Field(default=None, primary_key=True)
+class UczenBase(SQLModel):
     imie: str
     nazwisko: str
     stawka_za_godzine: int
@@ -94,15 +95,15 @@ def pobierz_wszystkich(
         zapytanie = zapytanie.offset(skip).limit(limit)
         wynik = session.exec(zapytanie).all()
         return wynik
-@app.get("/uczen/{uczen_id}")
+@app.get("/uczen/{uczen_id}", response_model=UczenResponse)
 def pobierz_jednego(uczen_id: int):
     with Session(engine) as session:
         uczen = session.get(UCZEN, uczen_id)
         if not uczen:
             raise HTTPException(status_code=404, detail="Nie ma takiego ucznia")
         return uczen
-@app.patch("/uczen/{uczen_id}/stawka")
-def ustaw_nowa_stawke(uczen_id: int, nowa_stawka: int, token: str = Depends(straznik_tokenow)):
+@app.patch("/uczen/{uczen_id}/stawka", dependencies=[Depends(straznik_tokenow)], response_model=UczenResponse)
+def ustaw_nowa_stawke(uczen_id: int, nowa_stawka: int):
     with Session(engine) as session:
         uczen = session.get(UCZEN, uczen_id)
         if not uczen:
@@ -113,16 +114,16 @@ def ustaw_nowa_stawke(uczen_id: int, nowa_stawka: int, token: str = Depends(stra
         session.refresh(uczen)
         return uczen
 @app.delete("/uczen/{uczen_id}")
-def usun_ucznia(uczen_id: int, token: str = Depends(straznik_tokenow)):
+def usun_ucznia(uczen_id: int, zalogowany_admin: str = Depends(weryfikuj_token)):
     with Session(engine) as session:
         uczen = session.get(UCZEN, uczen_id)
         if not uczen:
             raise HTTPException(status_code=404, detail="Ten uczen nie istnieje lub zostal juz usuniety")
         session.delete(uczen)
         session.commit()
-        return {"wiadomosc": f"Uczen o ID {uczen_id} zostal trwale usuniety"}
-@app.post("/uczen/{uczen_id}/lekcja")
-def dodaj_lekcje_dla_ucznia(uczen_id: int, nowa_lekcja: LEKCJA, token: str = Depends(straznik_tokenow)):
+        return {"wiadomosc": f"Uczen o ID {uczen_id} usuniety przez {zalogowany_admin}"}
+@app.post("/uczen/{uczen_id}/lekcja", dependencies=[Depends(straznik_tokenow)], response_model=LekcjaResponse)
+def dodaj_lekcje_dla_ucznia(uczen_id: int, nowa_lekcja: LEKCJA):
     with Session(engine) as session:
         uczen = session.get(UCZEN, uczen_id)
         if not uczen:
@@ -132,8 +133,8 @@ def dodaj_lekcje_dla_ucznia(uczen_id: int, nowa_lekcja: LEKCJA, token: str = Dep
         session.commit()
         session.refresh(nowa_lekcja)
         return nowa_lekcja
-@app.patch("/lekcja/{lekcja_id}")
-def aktualizuj_lekcje(lekcja_id: int, czas_trwania: int | None = None, czy_zaplacono: bool | None = None, token: str = Depends(straznik_tokenow)):
+@app.patch("/lekcja/{lekcja_id}", dependencies=[Depends(straznik_tokenow)], response_model=LekcjaResponse)
+def aktualizuj_lekcje(lekcja_id: int, czas_trwania: int | None = None, czy_zaplacono: bool | None = None):
     with Session(engine) as session:
         lekcja = session.get(LEKCJA, lekcja_id)
         if not lekcja:
@@ -146,8 +147,8 @@ def aktualizuj_lekcje(lekcja_id: int, czas_trwania: int | None = None, czy_zapla
         session.commit()
         session.refresh(lekcja)
         return lekcja
-@app.delete("/lekcja/{lekcja_id}")
-def usun_lekcje(lekcja_id: int, token: str = Depends(straznik_tokenow)):
+@app.delete("/lekcja/{lekcja_id}", dependencies=[Depends(straznik_tokenow)])
+def usun_lekcje(lekcja_id: int):
     with Session(engine) as session:
         lekcja = session.get(LEKCJA, lekcja_id)
         if not lekcja:
@@ -155,8 +156,8 @@ def usun_lekcje(lekcja_id: int, token: str = Depends(straznik_tokenow)):
         session.delete(lekcja)
         session.commit()
         return {"wiadomosc" : f"Lekcja o id {lekcja_id} zostala usunieta"}
-@app.get("/uczen/{uczen_id}/balans")
-def pobierz_balans_ucznia(uczen_id: int):
+@app.get("/uczen/{uczen_id}/balans", response_model=BalansResponse, dependencies=[Depends(straznik_tokenow)])
+def pobierz_balans_ucznia(uczen_id: int, background_tasks: BackgroundTasks):
     with Session(engine) as session:
         uczen = session.get(UCZEN, uczen_id)
         if not uczen:
@@ -165,6 +166,12 @@ def pobierz_balans_ucznia(uczen_id: int):
         nieoplacone_lekcje = session.exec(zapytanie).all()
         suma_minut = sum(lekcja.czas_trwania_minuty for lekcja in nieoplacone_lekcje)
         naleznosc = (suma_minut / 60) * uczen.stawka_za_godzine
+        if naleznosc > 0:
+            background_tasks.add_task(
+                wyslij_powiadomienie_o_dlugu,
+                uczen.imie,
+                naleznosc
+            )
         return {
             "uczen": f"{uczen.imie} {uczen.nazwisko}",
             "liczba_nieoplaconych_lekcji": len(nieoplacone_lekcje),
