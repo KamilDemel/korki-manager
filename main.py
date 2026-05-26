@@ -2,7 +2,6 @@ import jwt
 import time
 from fastapi import FastAPI, HTTPException
 from sqlmodel import SQLModel, Field, create_engine, Session, select
-from contextlib import asynccontextmanager
 from sqlmodel import Relationship
 from datetime import datetime, timedelta, timezone
 from fastapi import Query
@@ -23,9 +22,9 @@ class UczenBase(SQLModel):
     imie: str
     nazwisko: str
     stawka_za_godzine: int
-    lekcje: list["LEKCJA"] = Relationship(back_populates="uczen")
 class UCZEN(UczenBase, table = True):
     id: int | None = Field(default=None, primary_key=True)
+    lekcje: list["LEKCJA"] = Relationship(back_populates="uczen")
 class UczenResponse(UczenBase):
     id: int
 class LekcjaBase(SQLModel):
@@ -33,9 +32,9 @@ class LekcjaBase(SQLModel):
     czas_trwania_minuty: int = 60
     czy_oplacona: bool = False
     uczen_id: int = Field(foreign_key="uczen.id")
-    uczen: UCZEN | None = Relationship(back_populates="lekcje")
 class LEKCJA(LekcjaBase, table = True):
     id_lekcji: int | None = Field(default=None, primary_key=True)
+    uczen: UCZEN | None = Relationship(back_populates="lekcje")
 class LekcjaResponse(LekcjaBase):
     id_lekcji: int
 class BalansResponse(BaseModel):
@@ -43,12 +42,7 @@ class BalansResponse(BaseModel):
     liczba_nieoplaconych_lekcji: int
     laczny_czas_zalegly_minuty: int
     laczna_naleznosc: float
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    SQLModel.metadata.create_all(engine)
-    yield
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 def weryfikuj_token(token: str = Depends(straznik_tokenow)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
