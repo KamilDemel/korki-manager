@@ -1,5 +1,6 @@
 import jwt
 import time
+import os
 from fastapi import FastAPI, HTTPException
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 from sqlmodel import Relationship
@@ -9,12 +10,15 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from fastapi import BackgroundTasks
+from dotenv import load_dotenv
 def wyslij_powiadomienie_o_dlugu(imie_ucznia: str, kwota: float):
     time.sleep(5)
     print(f"--- [TŁO] Wysłano przypomnienie do {imie_ucznia} o zaległości {kwota} zł ---")
+load_dotenv()
 sqlite_url = "sqlite:///baza.db"
 engine = create_engine(sqlite_url)
-SECRET_KEY = "cfa21af05f0843c2fcf0d5a753db321a6ce43d4c5b2f74cc357431f27cd1f6e4"
+SECRET_KEY = os.getenv("SECRET_KEY")
+HASLO_ADMINA = os.getenv("ADMIN_PASSWORD")
 ALGORITHM = "HS256"
 czas_wygasniecia_minuty = 60
 straznik_tokenow = OAuth2PasswordBearer(tokenUrl="login")
@@ -56,7 +60,7 @@ def weryfikuj_token(token: str = Depends(straznik_tokenow)):
         raise HTTPException(status_code=401, detail="brak dostepu, sygnatura naruszona")
 @app.post("/login")
 def logowanie(formularz: OAuth2PasswordRequestForm = Depends()):
-    if formularz.username == "kamil" and formularz.password == "jebactuska":
+    if formularz.username == "kamil" and formularz.password == HASLO_ADMINA:
         wygasa = datetime.now(timezone.utc) + timedelta(minutes=czas_wygasniecia_minuty)
         dane_do_tokena = {
             "sub": formularz.username,
