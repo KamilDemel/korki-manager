@@ -6,7 +6,12 @@ from sqlmodel import Relationship
 from datetime import datetime, timedelta
 from fastapi import Query
 from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from fastapi import BackgroundTasks
+def wyslij_powiadomienie_o_dlugu(imie_ucznia: str, kwota: float):
+    time.sleep(5)
+    print(f"--- [TŁO] Wysłano przypomnienie do {imie_ucznia} o zaległości {kwota} zł ---")
 sqlite_url = "sqlite:///baza.db"
 engine = create_engine(sqlite_url)
 SECRET_KEY = "cfa21af05f0843c2fcf0d5a753db321a6ce43d4c5b2f74cc357431f27cd1f6e4"
