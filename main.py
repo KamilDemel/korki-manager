@@ -48,22 +48,40 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     yield
 app = FastAPI(lifespan=lifespan)
+def weryfikuj_token(token: str = Depends(straznik_tokenow)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Nieprawidlowy token")
+        return username
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token wygasl, zaloguj sie ponownie")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="brak dostepu, sygnatura naruszona")
 @app.post("/login")
-def logowanie(username: str, password: str, token: str = Depends(straznik_tokenow)):
-    if username == "kamil" and password == "jebactuska":
-        return {"access_token": "super_tajny_token", "token_type": "bearer"}
+def logowanie(formularz: OAuth2PasswordRequestForm = Depends()):
+    if formularz.username == "kamil" and formularz.password == "jebactuska":
+        wygasa = datetime.now(timezone.utc) + timedelta(minutes=czas_wygasniecia_minuty)
+        dane_do_tokena = {
+            "sub": formularz.username,
+            "exp": wygasa
+        }
+        zakodowany_token = jwt.encode(dane_do_tokena, SECRET_KEY, algorithm=ALGORITHM)
+        return {"access_token": zakodowany_token, "token_type": "bearer"}
     raise HTTPException(status_code=400, detail="zly login lub haslo")
 @app.get("/")
 def funkcja():
     return {"wiadomosc":"Korki manager działa!"}
-@app.post("/dodaj_ucznia")
-def dodaj_nowego(nowy_uczen: UCZEN, token: str = Depends(straznik_tokenow)):
+@app.post("/dodaj_ucznia", dependencies=[Depends(straznik_tokenow)], response_model=UczenResponse)
+def dodaj_nowego(nowy_uczen: UczenBase):
     with Session(engine) as session:
-        session.add(nowy_uczen)
+        db_uczen  = UCZEN.model_validate(nowy_uczen)
+        session.add(db_uczen)
         session.commit()
-        session.refresh(nowy_uczen)
-        return nowy_uczen
-@app.get("/uczniowie")
+        session.refresh(db_uczen)
+        return db_uczen
+@app.get("/uczniowie", response_model=list[UczenResponse])
 def pobierz_wszystkich(
     skip: int = 0,
     limit: int = Query(default=10, le=100),
