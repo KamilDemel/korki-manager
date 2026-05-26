@@ -23,13 +23,26 @@ class UCZEN(SQLModel, table = True):
     nazwisko: str
     stawka_za_godzine: int
     lekcje: list["LEKCJA"] = Relationship(back_populates="uczen")
-class LEKCJA(SQLModel, table = True):
-    id_lekcji: int | None = Field(default=None, primary_key=True)
+class UCZEN(UczenBase, table = True):
+    id: int | None = Field(default=None, primary_key=True)
+class UczenResponse(UczenBase):
+    id: int
+class LekcjaBase(SQLModel):
     data: datetime
     czas_trwania_minuty: int = 60
     czy_oplacona: bool = False
     uczen_id: int = Field(foreign_key="uczen.id")
     uczen: UCZEN | None = Relationship(back_populates="lekcje")
+class LEKCJA(LekcjaBase, table = True):
+    id_lekcji: int | None = Field(default=None, primary_key=True)
+class LekcjaResponse(LekcjaBase):
+    id_lekcji: int
+class BalansResponse(BaseModel):
+    uczen: str
+    liczba_nieoplaconych_lekcji: int
+    laczny_czas_zalegly_minuty: int
+    laczna_naleznosc: float
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
