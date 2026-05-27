@@ -3,7 +3,7 @@ __pycache__/
 baza.db
 *.py[codz]
 *$py.class
-
+app.log
 # C extensions
 *.so
 

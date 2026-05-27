@@ -2,6 +2,7 @@ import jwt
 import os
 import logging
 import smtplib
+import sys
 from email.message import EmailMessage
 from fastapi import FastAPI, HTTPException
 from sqlmodel import SQLModel, Field, create_engine, Session, select
@@ -16,7 +17,11 @@ from fastapi import BackgroundTasks
 from dotenv import load_dotenv
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers = [
+        logging.FileHandler("app.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
