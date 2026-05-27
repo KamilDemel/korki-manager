@@ -1,7 +1,8 @@
 import jwt
-import time
 import os
 import logging
+import smtplib
+from email.message import EmailMessage
 from fastapi import FastAPI, HTTPException
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 from sqlmodel import Relationship
@@ -10,6 +11,7 @@ from fastapi import Query
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
+from pydantic import EmailStr
 from fastapi import BackgroundTasks
 from dotenv import load_dotenv
 logging.basicConfig(
@@ -17,9 +19,27 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-def wyslij_powiadomienie_o_dlugu(imie_ucznia: str, kwota: float):
-    time.sleep(5)
-    logger.info(f"Wysłano przypomnienie do ucznia: {imie_ucznia} należy uregulować: {kwota}")
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+def wyslij_powiadomienie_o_dlugu(imie_ucznia: str, kwota: float, email_ucznia: str):
+    msg = EmailMessage()
+    msg.set_content(
+        f"Cześć {imie_ucznia},\n\nTo jest automatyczne przypomnienie z systemu Korki Manager.\nZalegasz z płatnością za zajęcia na kwotę: {kwota} PLN.\nProsimy o szybkie uregulowanie należności.\n\nPozdrawiamy,\nTwój Nauczyciel")
+
+    msg['Subject'] = "Korki Manager - Zaległa płatność!"
+    msg['From'] = EMAIL_SENDER
+    msg['To'] = email_ucznia
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            smtp.send_message(msg)
+
+        logger.info(f"Sukces! Wysłano maila do {email_ucznia} (Uczeń: {imie_ucznia})")
+
+    except Exception as e:
+        logger.error(f"KRYTYCZNY BŁĄD wysyłania maila do {imie_ucznia}: {e}")
+
 load_dotenv()
 sqlite_url = "sqlite:///baza.db"
 engine = create_engine(sqlite_url)
@@ -32,6 +52,7 @@ class UczenBase(SQLModel):
     imie: str
     nazwisko: str
     stawka_za_godzine: int
+    email: EmailStr
 class UCZEN(UczenBase, table = True):
     id: int | None = Field(default=None, primary_key=True)
     lekcje: list["LEKCJA"] = Relationship(back_populates="uczen")
@@ -174,7 +195,8 @@ def pobierz_balans_ucznia(uczen_id: int, background_tasks: BackgroundTasks):
             background_tasks.add_task(
                 wyslij_powiadomienie_o_dlugu,
                 uczen.imie,
-                naleznosc
+                naleznosc,
+                uczen.email
             )
         return {
             "uczen": f"{uczen.imie} {uczen.nazwisko}",
