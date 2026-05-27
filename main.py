@@ -1,6 +1,7 @@
 import jwt
 import time
 import os
+import logging
 from fastapi import FastAPI, HTTPException
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 from sqlmodel import Relationship
@@ -11,9 +12,14 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from fastapi import BackgroundTasks
 from dotenv import load_dotenv
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 def wyslij_powiadomienie_o_dlugu(imie_ucznia: str, kwota: float):
     time.sleep(5)
-    print(f"--- [TŁO] Wysłano przypomnienie do {imie_ucznia} o zaległości {kwota} zł ---")
+    logger.info(f"Wysłano przypomnienie do ucznia: {imie_ucznia} należy uregulować: {kwota}")
 load_dotenv()
 sqlite_url = "sqlite:///baza.db"
 engine = create_engine(sqlite_url)
