@@ -78,6 +78,15 @@ class BalansResponse(BaseModel):
     liczba_nieoplaconych_lekcji: int
     laczny_czas_zalegly_minuty: int
     laczna_naleznosc: float
+class FinanseBiznesu(BaseModel):
+    zarobiono_pln: float
+    dlugi_pln: float
+    prognozowany_przychod_po_splacie_dlugow: float
+class StatystykiResponse(BaseModel):
+    raport: str
+    liczba_aktywnych_uczniow: int
+    liczba_wszystkich_lekcji: int
+    finanse: FinanseBiznesu
 app = FastAPI()
 def weryfikuj_token(token: str = Depends(straznik_tokenow)):
     try:
@@ -209,7 +218,7 @@ def pobierz_balans_ucznia(uczen_id: int, background_tasks: BackgroundTasks):
             "laczny_czas_zalegly_minuty": suma_minut,
             "laczna_naleznosc": naleznosc
         }
-@app.get("/statystyki", tags=["Biznes"])
+@app.get("/statystyki", tags=["Biznes"], dependencies=[Depends(straznik_tokenow)], response_model=StatystykiResponse)
 def pobierz_statystyki_biznesowe():
     with Session(engine) as session:
         uczniowie = session.exec(select(UCZEN)).all()
