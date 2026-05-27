@@ -176,3 +176,23 @@ def pobierz_balans_ucznia(uczen_id: int, background_tasks: BackgroundTasks):
             "laczny_czas_zalegly_minuty": suma_minut,
             "laczna_naleznosc": naleznosc
         }
+@app.get("/statystyki", tags=["Biznes"])
+def pobierz_statystyki_biznesowe():
+    with Session(engine) as session:
+        uczniowie = session.exec(select(UCZEN)).all()
+        lekcje = session.exec(select(LEKCJA)).all()
+        liczba_uczniow = len(uczniowie)
+
+        zarobiono_lacznie = sum((lekcja.czas_trwania_minuty / 60) *  lekcja.uczen.stawka_za_godzine for lekcja in lekcje if lekcja.czy_oplacona)
+        dlugi_uczniow = sum((lekcja.czas_trwania_minuty / 60) * lekcja.uczen.stawka_za_godzine for lekcja in lekcje if not lekcja.czy_oplacona)
+        liczba_lekcji = len(lekcje)
+        return {
+            "raport": "Statystyki biznesowe",
+            "liczba_aktywnych_uczniow": liczba_uczniow,
+            "liczba_wszystkich_lekcji": liczba_lekcji,
+            "finanse": {
+                "zarobiono_pln": zarobiono_lacznie,
+                "dlugi_pln": dlugi_uczniow,
+                "prognozowany_przychod_po_splacie_dlugow": zarobiono_lacznie + dlugi_uczniow
+            }
+        }
